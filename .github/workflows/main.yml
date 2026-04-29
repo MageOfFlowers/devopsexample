@@ -2,55 +2,61 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "develop" ] # Lắng nghe cả 2 nhánh
 
 jobs:
-  build-and-test:
+  build-and-push:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '18'
+          cache: 'npm'
+
+      # BƯỚC MỚI: Xác định môi trường dựa vào nhánh
+      - name: Set Environment Tag
+        id: set-tag
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "ENV_TAG=prod" >> $GITHUB_ENV
+          else
+            echo "ENV_TAG=staging" >> $GITHUB_ENV
+          fi
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Run Lint/Test
         run: npm test || echo "No tests defined"
 
       - name: Login to Docker Hub
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKER_USERNAME }} # Sửa lại cho đúng
-          password: ${{ secrets.DOCKER_PASSWORD }} # Sửa lại cho đúng
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@v5
         with:
           context: .
           push: true
-          tags: hkduy/devopsexample:latest
+          # Áp dụng logic phân tách tag ở đây
+          tags: |
+            hkduy/devopsexample:${{ env.ENV_TAG }}
+            hkduy/devopsexample:${{ github.sha }}
 
-  deploy-docker:
-    needs: build-and-test
+  deploy:
+    needs: build-and-push
     runs-on: ubuntu-latest
+    # Chỉ chạy deploy thực tế nếu đây là nhánh main (Production)
+    # Nếu muốn deploy cả staging thì bạn có thể bỏ dòng 'if' này
+    if: github.ref == 'refs/heads/main'
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v2
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }} # Sửa lại cho đồng bộ
-          password: ${{ secrets.DOCKER_PASSWORD }} # Sửa lại cho đồng bộ
-
-      - name: Build and Push Docker image
-        uses: docker/build-push-action@v4
-        with:
-          context: . # Nên thêm context để build chắc chắn hơn
-          push: true
-          tags: hkduy/devopsexample:latest # Sửa lại cho khớp với tên image ở trên
+      - name: Deploy to Server via SSH
+        run: |
+          echo "Đang triển khai môi trường: ${{ github.ref_name }}"
+          echo "Lệnh SSH vào server để docker pull hkduy/devopsexample:prod..."
