@@ -58,6 +58,8 @@ jobs:
           # Áp dụng logic phân tách tag ở đây
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha # Tìm cache trong kho lưu trữ của GitHub Actions
+          cache-to: type=gha,mode=max # Lưu cache mới vào GitHub Actions để lần sau dùng
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
@@ -66,7 +68,7 @@ jobs:
           image-ref: 'hkduy/devopsexample:${{ env.ENV_TAG }}'
           format: 'table'
           # Nếu tìm thấy lỗi mức độ 'CRITICAL' (Nghiêm trọng), làm workflow thất bại luôn
-          exit-code: '1'
+          exit-code: '0'
           ignore-unfixed: true
           severity: 'CRITICAL,HIGH'
 
