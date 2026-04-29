@@ -56,9 +56,8 @@ jobs:
           context: .
           push: true
           # Áp dụng logic phân tách tag ở đây
-          tags: |
-            tags: ${{ steps.meta.outputs.tags }}
-            labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
 
   deploy:
     needs: build-and-push
