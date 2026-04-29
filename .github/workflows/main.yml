@@ -2,87 +2,39 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ "main", "develop" ] # Lắng nghe cả 2 nhánh
+    branches: [ "main", "develop" ]
 
 jobs:
-  build-and-push:
+  # Bước 1: Phân tích môi trường (Environment Check)
+  setup:
     runs-on: ubuntu-latest
+    outputs:
+      env_tag: ${{ steps.set-tag.outputs.ENV_TAG }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18'
-          cache: 'npm'
-      
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      # BƯỚC MỚI: Xác định môi trường dựa vào nhánh
-      - name: Set Environment Tag
-        id: set-tag
+      - id: set-tag
         run: |
           if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-            echo "ENV_TAG=prod" >> $GITHUB_ENV
+            echo "ENV_TAG=prod" >> $GITHUB_OUTPUT
           else
-            echo "ENV_TAG=staging" >> $GITHUB_ENV
+            echo "ENV_TAG=staging" >> $GITHUB_OUTPUT
           fi
 
-      - name: Docker meta
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: hkduy/devopsexample
-          tags: |
-            type=raw,value=prod,enable=${{ github.ref == 'refs/heads/main' }}
-            type=raw,value=staging,enable=${{ github.ref == 'refs/heads/develop' }}
-            type=sha,prefix=sha-,format=short
-            type=semver,pattern={{version}}
+  # Bước 2: Gọi Logic Build (Mục 2, 3, 4 đã trình bày)
+  call-build:
+    needs: setup
+    uses: ./.github/workflows/docker-build.yml
+    with:
+      image_name: hkduy/devopsexample
+      env_tag: ${{ needs.setup.outputs.env_tag }}
+    secrets:
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run Lint/Test
-        run: npm test || echo "No tests defined"
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          # Áp dụng logic phân tách tag ở đây
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha # Tìm cache trong kho lưu trữ của GitHub Actions
-          cache-to: type=gha,mode=max # Lưu cache mới vào GitHub Actions để lần sau dùng
-
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
-        with:
-          # Quét cái image vừa mới đẩy lên xong
-          image-ref: 'hkduy/devopsexample:${{ env.ENV_TAG }}'
-          format: 'table'
-          # Nếu tìm thấy lỗi mức độ 'CRITICAL' (Nghiêm trọng), làm workflow thất bại luôn
-          exit-code: '0'
-          ignore-unfixed: true
-          severity: 'CRITICAL,HIGH'
-
-  deploy:
-    needs: build-and-push
-    runs-on: ubuntu-latest
-    # Chỉ chạy deploy thực tế nếu đây là nhánh main (Production)
-    # Nếu muốn deploy cả staging thì bạn có thể bỏ dòng 'if' này
+  # Bước 3: Gọi Logic Deploy (Mục 1 đã trình bày)
+  call-deploy:
+    needs: [setup, call-build]
+    # Chỉ deploy nếu là nhánh main (Production)
     if: github.ref == 'refs/heads/main'
-    steps:
-      - name: Deploy to Server via SSH
-        run: |
-          echo "Đang triển khai môi trường: ${{ github.ref_name }}"
-          echo "Lệnh SSH vào server để docker pull hkduy/devopsexample:prod..."
+    uses: ./.github/workflows/deploy.yml
+    with:
+      env_name: "Production"

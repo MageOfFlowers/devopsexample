@@ -1,0 +1,17 @@
+name: Reusable Deploy Logic
+
+on:
+  workflow_call:
+    inputs:
+      env_name:
+        required: true
+        type: string
+
+jobs:
+  deploy-logic:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to Server via SSH
+        run: |
+          echo "Đang triển khai môi trường: ${{ inputs.env_name }}"
+          echo "Lệnh SSH vào server để docker pull và docker run..."
