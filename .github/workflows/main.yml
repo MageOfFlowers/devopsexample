@@ -59,6 +59,17 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          # Quét cái image vừa mới đẩy lên xong
+          image-ref: 'hkduy/devopsexample:${{ env.ENV_TAG }}'
+          format: 'table'
+          # Nếu tìm thấy lỗi mức độ 'CRITICAL' (Nghiêm trọng), làm workflow thất bại luôn
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: 'CRITICAL,HIGH'
+
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
